@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Glucose Log — Diabetes Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F5C57">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Glucose Log">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#EEF3F1;
+  --surface:#FFFFFF;
+  --surface-alt:#E1EAE6;
+  --ink:#1B2E2C;
+  --ink-soft:#4B5F5C;
+  --hairline:#CBD9D4;
+  --primary:#1F5C57;
+  --primary-deep:#123935;
+  --primary-tint:#DCEAE7;
+  --accent:#C1622E;
+  --accent-tint:#F3E1D4;
+  --low:#B0433C;
+  --low-tint:#F5DEDC;
+  --high:#C98A2A;
+  --high-tint:#F5E7CE;
+  --good:#3C7A5E;
+  --good-tint:#DCEEE4;
+  --radius-s:6px;
+  --radius-m:12px;
+  --radius-l:20px;
+  --shadow:0 1px 2px rgba(18,57,53,.06), 0 4px 14px rgba(18,57,53,.07);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-feature-settings:"tnum" 1;
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:76px;
+  min-height:100vh;
+}
+h1,h2,h3,.serif{font-family:'Lora',serif;}
+h1{font-size:1.28rem;margin:0;font-weight:600;color:var(--primary-deep);}
+h2{font-size:1.05rem;margin:0 0 10px;font-weight:600;color:var(--primary-deep);}
+h3{font-size:0.92rem;margin:0 0 6px;font-weight:600;color:var(--primary-deep);}
+p{line-height:1.5;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;font-size:0.95rem;}
+
+/* header */
+header.app-header{
+  position:sticky;top:0;z-index:20;
+  background:var(--primary);
+  color:#fff;
+  padding:14px 18px 12px;
+  display:flex;justify-content:space-between;align-items:baseline;
+  box-shadow:0 2px 10px rgba(18,57,53,.18);
+}
+header.app-header .date{font-size:0.78rem;color:#CFE4E0;font-weight:500;}
+
+/* tab content */
+main{max-width:520px;margin:0 auto;padding:16px 14px 14px;}
+.panel{display:none;}
+.panel.active{display:block;animation:fadein .18s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+.card{
+  background:var(--surface);
+  border-radius:var(--radius-m);
+  padding:16px;
+  margin-bottom:14px;
+  box-shadow:var(--shadow);
+}
+
+/* bottom nav */
+nav.tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:30;
+  background:var(--surface);
+  border-top:1px solid var(--hairline);
+  display:flex;
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+nav.tabbar button{
+  flex:1;background:none;border:none;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 2px;border-radius:var(--radius-s);
+  color:var(--ink-soft);font-size:0.66rem;font-weight:600;
+}
+nav.tabbar button.active{color:var(--primary);background:var(--primary-tint);}
+nav.tabbar svg{width:20px;height:20px;}
+
+/* hero glucose display, meter-style */
+.meter{
+  background:var(--primary-deep);
+  border-radius:var(--radius-l);
+  padding:22px 20px 18px;
+  color:#fff;
+  margin-bottom:14px;
+  position:relative;
+  overflow:hidden;
+}
+.meter::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 85% -10%, rgba(255,255,255,.09), transparent 55%);
+}
+.meter .label{font-size:0.72rem;letter-spacing:0.02em;color:#9FC7C1;font-weight:600;position:relative;}
+.meter .value-row{display:flex;align-items:baseline;gap:8px;position:relative;}
+.meter .value{font-family:'Lora',serif;font-size:3.4rem;font-weight:700;line-height:1;}
+.meter .unit{font-size:0.95rem;color:#B9D9D4;font-weight:500;}
+.meter .meta{margin-top:8px;font-size:0.78rem;color:#B9D9D4;position:relative;}
+.meter .flag{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700;position:relative;}
+.flag.low{background:var(--low);color:#fff;}
+.flag.high{background:var(--high);color:#1B2E2C;}
+.flag.good{background:var(--good);color:#fff;}
+.flag.none{background:rgba(255,255,255,.12);color:#CFE4E0;}
+
+.quick-actions{display:flex;gap:10px;margin-bottom:14px;}
+.quick-btn{
+  flex:1;background:var(--surface);border:1px solid var(--hairline);
+  border-radius:var(--radius-m);padding:14px 10px;text-align:center;
+  box-shadow:var(--shadow);
+}
+.quick-btn .ic{font-size:1.4rem;margin-bottom:4px;display:block;}
+.quick-btn .lbl{font-weight:600;font-size:0.85rem;color:var(--primary-deep);}
+.quick-btn .sub{font-size:0.7rem;color:var(--ink-soft);margin-top:1px;}
+
+.fab{
+  position:fixed;right:16px;bottom:86px;z-index:25;
+  width:54px;height:54px;border-radius:50%;
+  background:var(--accent);color:#fff;border:none;
+  font-size:1.6rem;box-shadow:0 4px 16px rgba(193,98,46,.45);
+}
+
+/* form elements */
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:0.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:4px;}
+.field input[type=text],.field input[type=number],.field input[type=date],.field input[type=time],.field select,.field textarea{
+  width:100%;padding:9px 10px;border:1px solid var(--hairline);border-radius:var(--radius-s);
+  background:#fff;color:var(--ink);
+}
+.field textarea{min-height:60px;resize:vertical;}
+.row2{display:flex;gap:10px;}
+.row2 .field{flex:1;}
+.chk-grid{display:flex;flex-wrap:wrap;gap:7px;}
+.chk-pill{
+  display:flex;align-items:center;gap:5px;
+  border:1px solid var(--hairline);border-radius:20px;padding:5px 11px;
+  font-size:0.78rem;background:#fff;
+}
+.chk-pill input{margin:0;}
+.chk-pill.checked{background:var(--primary-tint);border-color:var(--primary);color:var(--primary-deep);font-weight:600;}
+
+.accordion-head{
+  display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;padding:10px 0;border-top:1px solid var(--hairline);
+}
+.accordion-head h3{margin:0;}
+.accordion-head .chev{transition:transform .15s;color:var(--ink-soft);}
+.accordion-body{display:none;padding-top:4px;}
+.accordion.open .accordion-body{display:block;}
+.accordion.open .chev{transform:rotate(180deg);}
+
+.btn{
+  display:inline-block;padding:10px 16px;border-radius:var(--radius-s);
+  border:none;font-weight:600;font-size:0.88rem;
+}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-secondary{background:var(--surface-alt);color:var(--primary-deep);}
+.btn-danger{background:var(--low-tint);color:var(--low);}
+.btn-block{width:100%;text-align:center;}
+.btn-row{display:flex;gap:10px;margin-top:14px;}
+.btn-row .btn{flex:1;}
+
+/* modal */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(18,41,38,.45);z-index:50;
+  display:none;align-items:flex-end;justify-content:center;
+}
+.modal-backdrop.open{display:flex;}
+.modal{
+  background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;
+  border-radius:20px 20px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom));
+  animation:slideup .2s ease;
+}
+@keyframes slideup{from{transform:translateY(30px);opacity:0;}to{transform:none;opacity:1;}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.modal-head button.close{background:none;border:none;font-size:1.3rem;color:var(--ink-soft);padding:4px 8px;}
+
+/* log list */
+.log-item{
+  background:var(--surface);border-radius:var(--radius-m);padding:12px 14px;
+  margin-bottom:10px;box-shadow:var(--shadow);
+}
+.log-item .top{display:flex;justify-content:space-between;align-items:center;}
+.log-item .g{font-family:'Lora',serif;font-weight:700;font-size:1.5rem;}
+.log-item .g.low{color:var(--low);}
+.log-item .g.high{color:var(--high);}
+.log-item .g.good{color:var(--good);}
+.log-item .meta{font-size:0.76rem;color:var(--ink-soft);}
+.log-item .type-tag{
+  display:inline-block;background:var(--primary-tint);color:var(--primary-deep);
+  font-size:0.68rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px;
+}
+.log-item .detail{display:none;margin-top:10px;border-top:1px solid var(--hairline);padding-top:10px;font-size:0.83rem;}
+.log-item.open .detail{display:block;}
+.log-item .detail div{margin-bottom:4px;}
+.log-item .detail b{color:var(--ink-soft);font-weight:600;}
+.log-item .actions{display:flex;gap:8px;margin-top:10px;}
+.log-item .actions button{flex:1;padding:7px;font-size:0.78rem;border-radius:var(--radius-s);border:none;}
+
+/* filters */
+.filter-row{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;}
+.filter-chip{
+  flex:none;padding:7px 13px;border-radius:20px;font-size:0.78rem;font-weight:600;
+  background:var(--surface);border:1px solid var(--hairline);color:var(--ink-soft);white-space:nowrap;
+}
+.filter-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+
+/* stats grid */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.stat-box{background:var(--surface-alt);border-radius:var(--radius-s);padding:10px 12px;}
+.stat-box .n{font-family:'Lora',serif;font-size:1.35rem;font-weight:700;color:var(--primary-deep);}
+.stat-box .l{font-size:0.7rem;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+
+table.simple{width:100%;border-collapse:collapse;font-size:0.82rem;}
+table.simple th{text-align:left;font-size:0.68rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.02em;padding:6px 6px;border-bottom:1px solid var(--hairline);}
+table.simple td{padding:7px 6px;border-bottom:1px solid var(--hairline);}
+table.simple tr:last-child td{border-bottom:none;}
+
+canvas{max-width:100%;}
+.chart-wrap{margin-bottom:20px;}
+
+.subtabs{display:flex;gap:6px;margin-bottom:14px;background:var(--surface-alt);padding:4px;border-radius:var(--radius-s);}
+.subtabs button{flex:1;background:none;border:none;padding:8px;font-size:0.78rem;font-weight:600;color:var(--ink-soft);border-radius:6px;}
+.subtabs button.active{background:#fff;color:var(--primary-deep);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+
+.rec-item{background:var(--surface);border-radius:var(--radius-m);padding:12px 14px;margin-bottom:10px;box-shadow:var(--shadow);font-size:0.85rem;}
+.rec-item .head{font-weight:700;color:var(--primary-deep);display:flex;justify-content:space-between;}
+.rec-item .del{background:none;border:none;color:var(--low);font-size:0.75rem;font-weight:600;}
+
+.empty{text-align:center;padding:34px 16px;color:var(--ink-soft);}
+.empty .ic{font-size:2rem;margin-bottom:8px;}
+
+.disclaimer{
+  font-size:0.74rem;color:var(--ink-soft);background:var(--surface-alt);
+  border-radius:var(--radius-s);padding:10px 12px;line-height:1.5;margin-top:6px;
+}
+.summary-line{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--hairline);font-size:0.85rem;}
+.summary-line:last-child{border-bottom:none;}
+.summary-line b{color:var(--primary-deep);}
+@media print{
+  header.app-header,nav.tabbar,.fab,.no-print{display:none !important;}
+  body{padding-bottom:0;background:#fff;}
+  .panel{display:none !important;}
+  #panel-summary{display:block !important;}
+  .card{box-shadow:none;border:1px solid #ccc;}
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1 style="color:#fff;">Glucose Log</h1>
+  <span class="date" id="headerDate"></span>
+</header>
+
+<main>
+  <div id="storageNotice" class="disclaimer no-print" style="display:none;background:var(--low-tint);color:var(--low);margin-bottom:12px;"></div>
+
+  <!-- HOME -->
+  <section class="panel active" id="panel-home">
+    <div id="backupReminder" class="disclaimer no-print" style="display:none;background:var(--high-tint);color:#7A5716;margin-bottom:12px;"></div>
+    <div class="meter" id="meterCard">
+      <div class="label">MOST RECENT READING</div>
+      <div class="value-row"><span class="value" id="latestVal">—</span><span class="unit">mg/dL</span></div>
+      <div class="meta" id="latestMeta">No readings logged yet</div>
+      <span class="flag none" id="latestFlag">—</span>
+    </div>
+
+    <div class="quick-actions">
+      <button class="quick-btn" onclick="openEntryForm('morning')">
+        <span class="ic">🌅</span>
+        <div class="lbl">Morning Entry</div>
+        <div class="sub">Fasting · weight · BP</div>
+      </button>
+      <button class="quick-btn" onclick="openEntryForm('evening')">
+        <span class="ic">🌙</span>
+        <div class="lbl">Evening Entry</div>
+        <div class="sub">Before bed · symptoms</div>
+      </button>
+    </div>
+
+    <div class="card">
+      <h2>Today</h2>
+      <div class="stat-grid" id="todayStats"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent entries</h2>
+      <div id="homeRecent"></div>
+    </div>
+
+    <div class="card">
+      <h2>Backup &amp; transfer</h2>
+      <p style="font-size:0.82rem;color:var(--ink-soft);margin-top:0;">Your entries are saved only on this device, in this browser. To move your records to another phone or computer, download a backup file and import it there.</p>
+      <div class="btn-row" style="margin-top:4px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="exportData()">⬇ Download backup</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('importFile').click()">⬆ Restore backup</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+      <div id="lastBackupLine" style="font-size:0.78rem;color:var(--ink-soft);margin-top:10px;"></div>
+      <div id="backupStatus" style="font-size:0.78rem;margin-top:4px;"></div>
+    </div>
+
+    <div class="disclaimer">This tool only records and summarizes information you enter. It does not diagnose conditions, interpret results, or recommend medication changes. Always follow your doctor's guidance.</div>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel" id="panel-log">
+    <h2>Diabetes Daily Log</h2>
+    <div class="filter-row" id="logFilters"></div>
+    <div id="logList"></div>
+  </section>
+
+  <!-- TRENDS -->
+  <section class="panel" id="panel-trends">
+    <h2>Trends &amp; Summaries</h2>
+    <div class="filter-row" id="trendFilters"></div>
+
+    <div class="card">
+      <h3>Summary — <span id="summaryRangeLabel"></span></h3>
+      <div class="stat-grid" id="rangeStats"></div>
+    </div>
+
+    <div class="card">
+      <h3>Weekly averages</h3>
+      <table class="simple" id="weeklyTable"></table>
+    </div>
+
+    <div class="card">
+      <h3>Monthly averages</h3>
+      <table class="simple" id="monthlyTable"></table>
+    </div>
+
+    <div class="card chart-wrap"><h3>Blood glucose trend</h3><canvas id="chartGlucose" height="180"></canvas></div>
+    <div class="card chart-wrap"><h3>Fasting glucose trend</h3><canvas id="chartFasting" height="180"></canvas></div>
+    <div class="card chart-wrap"><h3>Before-meal vs after-meal</h3><canvas id="chartBeforeAfter" height="180"></canvas></div>
+    <div class="card chart-wrap"><h3>Weekly average glucose</h3><canvas id="chartWeekly" height="180"></canvas></div>
+    <div class="card chart-wrap"><h3>Weight trend</h3><canvas id="chartWeight" height="180"></canvas></div>
+    <div class="card chart-wrap"><h3>Blood pressure trend</h3><canvas id="chartBP" height="180"></canvas></div>
+  </section>
+
+  <!-- RECORDS -->
+  <section class="panel" id="panel-records">
+    <h2>Records</h2>
+    <div class="subtabs" id="recordSubtabs">
+      <button class="active" data-sub="meds">Medications</button>
+      <button data-sub="labs">Lab Results</button>
+      <button data-sub="visits">Doctor Visits</button>
+    </div>
+
+    <div id="sub-meds" class="rec-panel">
+      <button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openMedForm()">+ Add medication</button>
+      <div id="medList"></div>
+    </div>
+    <div id="sub-labs" class="rec-panel" style="display:none">
+      <button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openLabForm()">+ Add lab result</button>
+      <div id="labList"></div>
+    </div>
+    <div id="sub-visits" class="rec-panel" style="display:none">
+      <button class="btn btn-primary btn-block" style="margin-bottom:12px" onclick="openVisitForm()">+ Add doctor visit</button>
+      <div id="visitList"></div>
+    </div>
+  </section>
+
+  <!-- DOCTOR SUMMARY -->
+  <section class="panel" id="panel-summary">
+    <h2>Doctor Summary</h2>
+    <div class="card no-print">
+      <label style="font-size:0.78rem;font-weight:600;color:var(--ink-soft);">Report period</label>
+      <div class="filter-row" id="summaryFilters" style="margin-top:8px;margin-bottom:0;"></div>
+    </div>
+
+    <div class="card">
+      <h3 class="serif" style="font-size:1.1rem;">Glucose Summary Report</h3>
+      <div class="summary-line"><span>Date range</span><b id="ds-range">—</b></div>
+      <div class="summary-line"><span>Number of readings</span><b id="ds-count">—</b></div>
+      <div class="summary-line"><span>Average glucose</span><b id="ds-avg">—</b></div>
+      <div class="summary-line"><span>Fasting average</span><b id="ds-fasting">—</b></div>
+      <div class="summary-line"><span>After-meal average</span><b id="ds-aftermeal">—</b></div>
+      <div class="summary-line"><span>Highest reading</span><b id="ds-max">—</b></div>
+      <div class="summary-line"><span>Lowest reading</span><b id="ds-min">—</b></div>
+      <div class="summary-line"><span>Hypoglycemia events (&lt;70 mg/dL)</span><b id="ds-hypo">—</b></div>
+      <div class="summary-line"><span>High readings (&gt;180 mg/dL)</span><b id="ds-hyper">—</b></div>
+    </div>
+
+    <div class="card">
+      <h3>Current medications</h3>
+      <div id="ds-meds">—</div>
+    </div>
+    <div class="card">
+      <h3>Medication changes in this period</h3>
+      <div id="ds-medchanges">—</div>
+    </div>
+    <div class="card">
+      <h3>Weight change</h3>
+      <div id="ds-weight">—</div>
+    </div>
+    <div class="card">
+      <h3>Blood pressure trend</h3>
+      <div id="ds-bp">—</div>
+    </div>
+    <div class="card">
+      <h3>Recent laboratory results</h3>
+      <div id="ds-labs">—</div>
+    </div>
+    <div class="card">
+      <h3>Symptoms reported</h3>
+      <div id="ds-symptoms">—</div>
+    </div>
+    <div class="card">
+      <h3>Questions / concerns to discuss</h3>
+      <textarea id="ds-questions" placeholder="Notes for your appointment…" style="width:100%;min-height:80px;padding:9px;border-radius:var(--radius-s);border:1px solid var(--hairline);"></textarea>
+    </div>
+
+    <button class="btn btn-secondary btn-block no-print" onclick="window.print()" style="margin-bottom:8px;">Print / Save as PDF</button>
+    <div class="disclaimer">This report summarizes self-recorded data only. It is not a diagnosis and does not reflect clinical interpretation. Please review with your doctor.</div>
+  </section>
+
+</main>
+
+<button class="fab no-print" onclick="openEntryForm()">+</button>
+
+<nav class="tabbar">
+  <button data-tab="home" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 001 1h4v-6h4v6h4a1 1 0 001-1v-9"/></svg>Home</button>
+  <button data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Log</button>
+  <button data-tab="trends"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M11 19V4M18 19v-7"/></svg>Trends</button>
+  <button data-tab="records"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 2h11v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7z"/></svg>Records</button>
+  <button data-tab="summary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 12h6M9 16h6M9 8h2"/></svg>Summary</button>
+</nav>
+
+<!-- ENTRY MODAL -->
+<div class="modal-backdrop" id="entryModalBackdrop">
+  <div class="modal">
+    <div class="modal-head"><h2 id="entryModalTitle">Add entry</h2><button class="close" onclick="closeModal('entryModalBackdrop')">✕</button></div>
+    <form id="entryForm" onsubmit="return saveEntry(event)">
+      <input type="hidden" id="f-id">
+      <div class="row2">
+        <div class="field"><label>Date</label><input type="date" id="f-date" required></div>
+        <div class="field"><label>Time</label><input type="time" id="f-time" required></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Blood glucose (mg/dL)</label><input type="number" id="f-glucose" placeholder="e.g. 112"></div>
+        <div class="field"><label>Measurement type</label>
+          <select id="f-type">
+            <option>Fasting</option>
+            <option>Before breakfast</option>
+            <option>2 hours after breakfast</option>
+            <option>Before lunch</option>
+            <option>2 hours after lunch</option>
+            <option>Before dinner</option>
+            <option>2 hours after dinner</option>
+            <option>Before bed</option>
+            <option>Random</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Meal / food description</label><input type="text" id="f-meal" placeholder="e.g. Oatmeal, eggs, coffee"></div>
+      <div class="field"><label>Carbohydrate estimate (g, if known)</label><input type="number" id="f-carbs"></div>
+
+      <div class="accordion" id="acc-med">
+        <div class="accordion-head" onclick="toggleAcc('acc-med')"><h3>Medication</h3><span class="chev">⌄</span></div>
+        <div class="accordion-body">
+          <div class="field"><label>Diabetes medication</label>
+            <select id="f-med"><option value="">— none / not taken —</option></select>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Dose</label><input type="text" id="f-meddose" placeholder="e.g. 500 mg"></div>
+            <div class="field"><label>Time taken</label><input type="time" id="f-medtime"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion" id="acc-exercise">
+        <div class="accordion-head" onclick="toggleAcc('acc-exercise')"><h3>Exercise / activity</h3><span class="chev">⌄</span></div>
+        <div class="accordion-body">
+          <div class="row2">
+            <div class="field"><label>Activity</label><input type="text" id="f-exercise" placeholder="e.g. Walking"></div>
+            <div class="field"><label>Duration (min)</label><input type="number" id="f-exerciseDur"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="accordion" id="acc-vitals">
+        <div class="accordion-head" onclick="toggleAcc('acc-vitals')"><h3>Vitals</h3><span class="chev">⌄</span></div>
+        <div class="accordion-body">
+          <div class="row2">
+            <div class="field"><label>Blood pressure (systolic)</label><input type="number" id="f-bpSys" placeholder="120"></div>
+            <div class="field"><label>Blood pressure (diastolic)</label><input type="number" id="f-bpDia" placeholder="80"></div>
+          </div>
+          <div class="field"><label>Weight (lb)</label><input type="number" step="0.1" id="f-weight"></div>
+        </div>
+      </div>
+
+      <div class="accordion" id="acc-symptoms">
+        <div class="accordion-head" onclick="toggleAcc('acc-symptoms')"><h3>Symptoms</h3><span class="chev">⌄</span></div>
+        <div class="accordion-body">
+          <div class="chk-grid" id="symptomGrid"></div>
+          <div class="field" style="margin-top:8px;"><label>Other symptoms</label><input type="text" id="f-symptomOther"></div>
+        </div>
+      </div>
+
+      <div class="accordion" id="acc-hypo">
+        <div class="accordion-head" onclick="toggleAcc('acc-hypo')"><h3>Hypoglycemia event</h3><span class="chev">⌄</span></div>
+        <div class="accordion-body">
+          <label class="chk-pill" style="margin-bottom:10px;display:inline-flex;">
+            <input type="checkbox" id="f-hypoEvent"> Low blood sugar event occurred
+          </label>
+          <div class="chk-grid" id="hypoGrid"></div>
+          <div class="field" style="margin-top:8px;"><label>How was it treated?</label><input type="text" id="f-hypoTreatment" placeholder="e.g. Juice, glucose tabs"></div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:12px;"><label>Notes</label><textarea id="f-notes"></textarea></div>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" style="flex:0 0 auto;padding:10px 14px;" id="deleteEntryBtn" onclick="deleteCurrentEntry()">Delete</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save entry</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MED MODAL -->
+<div class="modal-backdrop" id="medModalBackdrop">
+  <div class="modal">
+    <div class="modal-head"><h2>Medication</h2><button class="close" onclick="closeModal('medModalBackdrop')">✕</button></div>
+    <form onsubmit="return saveMed(event)">
+      <input type="hidden" id="m-id">
+      <div class="field"><label>Medication name</label><input type="text" id="m-name" required></div>
+      <div class="row2">
+        <div class="field"><label>Dose</label><input type="text" id="m-dose" placeholder="e.g. 500 mg"></div>
+        <div class="field"><label>Frequency</label><input type="text" id="m-freq" placeholder="e.g. Twice daily"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Start date</label><input type="date" id="m-start"></div>
+        <div class="field"><label>Status</label>
+          <select id="m-status"><option value="active">Active</option><option value="stopped">Stopped</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Changes / history</label><textarea id="m-changes" placeholder="e.g. Increased from 250mg on 3/1"></textarea></div>
+      <div class="field"><label>Notes</label><textarea id="m-notes"></textarea></div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="deleteCurrentMed()">Delete</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- LAB MODAL -->
+<div class="modal-backdrop" id="labModalBackdrop">
+  <div class="modal">
+    <div class="modal-head"><h2>Lab result</h2><button class="close" onclick="closeModal('labModalBackdrop')">✕</button></div>
+    <form onsubmit="return saveLab(event)">
+      <input type="hidden" id="l-id">
+      <div class="field"><label>Test date</label><input type="date" id="l-date" required></div>
+      <div class="row2"><div class="field"><label>HbA1c (%)</label><input type="number" step="0.1" id="l-a1c"></div>
+      <div class="field"><label>Fasting glucose (mg/dL)</label><input type="number" id="l-fg"></div></div>
+      <div class="row2"><div class="field"><label>LDL (mg/dL)</label><input type="number" id="l-ldl"></div>
+      <div class="field"><label>HDL (mg/dL)</label><input type="number" id="l-hdl"></div></div>
+      <div class="row2"><div class="field"><label>Triglycerides (mg/dL)</label><input type="number" id="l-trig"></div>
+      <div class="field"><label>Total cholesterol (mg/dL)</label><input type="number" id="l-chol"></div></div>
+      <div class="row2"><div class="field"><label>Creatinine (mg/dL)</label><input type="number" step="0.01" id="l-creat"></div>
+      <div class="field"><label>eGFR</label><input type="number" id="l-egfr"></div></div>
+      <div class="field"><label>Other results</label><textarea id="l-other"></textarea></div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="deleteCurrentLab()">Delete</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- VISIT MODAL -->
+<div class="modal-backdrop" id="visitModalBackdrop">
+  <div class="modal">
+    <div class="modal-head"><h2>Doctor visit</h2><button class="close" onclick="closeModal('visitModalBackdrop')">✕</button></div>
+    <form onsubmit="return saveVisit(event)">
+      <input type="hidden" id="v-id">
+      <div class="field"><label>Appointment date</label><input type="date" id="v-date" required></div>
+      <div class="field"><label>Doctor's comments</label><textarea id="v-comments"></textarea></div>
+      <div class="field"><label>Medication changes</label><textarea id="v-medchanges"></textarea></div>
+      <div class="field"><label>Requested tests</label><textarea id="v-tests"></textarea></div>
+      <div class="field"><label>Follow-up date</label><input type="date" id="v-followup"></div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-secondary" onclick="deleteCurrentVisit()">Delete</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+/* ---------------- state ---------------- */
+let state = { entries: [], medications: [], labs: [], visits: [], questions: "", lastBackup: null };
+let storageVersion = null;
+const SYMPTOM_OPTIONS = ["Fatigue","Excess thirst","Frequent urination","Blurred vision","Headache","Nausea","Numbness/tingling"];
+const HYPO_OPTIONS = ["Shakiness","Sweating","Dizziness","Confusion","Rapid heartbeat","Hunger","Irritability"];
+let charts = {};
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+const STORAGE_KEY = 'diabetes-dashboard-state';
+const hasClaudeStorage = (typeof window!=='undefined' && window.storage && typeof window.storage.get==='function');
+
+async function loadState(){
+  try{
+    if(hasClaudeStorage){
+      const res = await window.storage.get(STORAGE_KEY, false);
+      if(res && res.value) state = Object.assign(state, JSON.parse(res.value));
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) state = Object.assign(state, JSON.parse(raw));
+    }
+  }catch(e){ console.warn('No saved data found yet, or it could not be read.', e); }
+  showStorageNotice();
+  render();
+}
+async function saveState(){
+  try{
+    if(hasClaudeStorage){
+      await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+    setStorageStatus(true);
+  }catch(e){
+    console.error('Storage save failed', e);
+    setStorageStatus(false);
+  }
+}
+function setStorageStatus(ok){
+  const el = document.getElementById('storageNotice');
+  if(!el) return;
+  if(ok){ el.style.display='none'; }
+  else { el.style.display='block'; el.textContent = '⚠️ Your last change could not be saved on this device. Try again, or check your browser\'s storage/privacy settings.'; }
+}
+function showStorageNotice(){
+  const el = document.getElementById('storageNotice');
+  if(!el) return;
+  if(!hasClaudeStorage && typeof localStorage==='undefined'){
+    el.style.display='block';
+    el.textContent = '⚠️ This browser does not support local storage, so entries will not be saved between visits.';
+  }
+}
+
+/* ---------------- tabs ---------------- */
+document.querySelectorAll('nav.tabbar button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='trends') renderTrends();
+    if(btn.dataset.tab==='summary') renderDoctorSummary();
+  });
+});
+document.querySelectorAll('#recordSubtabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#recordSubtabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.rec-panel').forEach(p=>p.style.display='none');
+    document.getElementById('sub-'+btn.dataset.sub).style.display='block';
+  });
+});
+
+function toggleAcc(id){ document.getElementById(id).classList.toggle('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+
+/* ---------------- glucose helpers ---------------- */
+function glucoseFlag(v){
+  if(v==null || v==='') return 'none';
+  if(v<70) return 'low';
+  if(v>180) return 'high';
+  return 'good';
+}
+function fmtDate(d){
+  const dt = new Date(d+'T00:00:00');
+  return dt.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+}
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowTime(){ const d=new Date(); return d.toTimeString().slice(0,5); }
+
+document.getElementById('headerDate').textContent = new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+
+/* ---------------- ENTRY FORM ---------------- */
+function buildSymptomGrid(){
+  const g1 = document.getElementById('symptomGrid'); g1.innerHTML='';
+  SYMPTOM_OPTIONS.forEach(s=>{
+    g1.innerHTML += `<label class="chk-pill"><input type="checkbox" value="${s}" class="symp-chk"> ${s}</label>`;
+  });
+  const g2 = document.getElementById('hypoGrid'); g2.innerHTML='';
+  HYPO_OPTIONS.forEach(s=>{
+    g2.innerHTML += `<label class="chk-pill"><input type="checkbox" value="${s}" class="hypo-chk"> ${s}</label>`;
+  });
+}
+buildSymptomGrid();
+document.addEventListener('change', e=>{
+  if(e.target.classList.contains('symp-chk') || e.target.classList.contains('hypo-chk')){
+    e.target.closest('.chk-pill').classList.toggle('checked', e.target.checked);
+  }
+});
+
+function refreshMedDropdown(){
+  const sel = document.getElementById('f-med');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— none / not taken —</option>';
+  state.medications.filter(m=>m.status!=='stopped').forEach(m=>{
+    sel.innerHTML += `<option value="${m.name}">${m.name}${m.dose? ' ('+m.dose+')':''}</option>`;
+  });
+  sel.innerHTML += '<option value="__other">Other (type below in notes)</option>';
+  sel.value = current || "";
+}
+
+function openEntryForm(preset, editId){
+  document.getElementById('entryForm').reset();
+  document.querySelectorAll('.chk-pill.checked').forEach(p=>p.classList.remove('checked'));
+  document.querySelectorAll('.accordion').forEach(a=>a.classList.remove('open'));
+  document.getElementById('f-id').value = '';
+  document.getElementById('deleteEntryBtn').style.display = 'none';
+  refreshMedDropdown();
+
+  document.getElementById('f-date').value = todayISO();
+  document.getElementById('f-time').value = nowTime();
+
+  if(editId){
+    const e = state.entries.find(x=>x.id===editId);
+    if(e){
+      document.getElementById('entryModalTitle').textContent = 'Edit entry';
+      document.getElementById('deleteEntryBtn').style.display='inline-block';
+      document.getElementById('f-id').value = e.id;
+      document.getElementById('f-date').value = e.date;
+      document.getElementById('f-time').value = e.time;
+      document.getElementById('f-glucose').value = e.glucose ?? '';
+      document.getElementById('f-type').value = e.type || 'Fasting';
+      document.getElementById('f-meal').value = e.meal || '';
+      document.getElementById('f-carbs').value = e.carbs ?? '';
+      document.getElementById('f-med').value = e.med || '';
+      document.getElementById('f-meddose').value = e.medDose || '';
+      document.getElementById('f-medtime').value = e.medTime || '';
+      document.getElementById('f-exercise').value = e.exercise || '';
+      document.getElementById('f-exerciseDur').value = e.exerciseDur ?? '';
+      document.getElementById('f-bpSys').value = e.bpSys ?? '';
+      document.getElementById('f-bpDia').value = e.bpDia ?? '';
+      document.getElementById('f-weight').value = e.weight ?? '';
+      document.getElementById('f-symptomOther').value = e.symptomOther || '';
+      document.getElementById('f-hypoEvent').checked = !!e.hypoEvent;
+      document.getElementById('f-hypoTreatment').value = e.hypoTreatment || '';
+      document.getElementById('f-notes').value = e.notes || '';
+      (e.symptoms||[]).forEach(s=>{
+        const el = [...document.querySelectorAll('.symp-chk')].find(c=>c.value===s);
+        if(el){ el.checked=true; el.closest('.chk-pill').classList.add('checked'); }
+      });
+      (e.hypoSymptoms||[]).forEach(s=>{
+        const el = [...document.querySelectorAll('.hypo-chk')].find(c=>c.value===s);
+        if(el){ el.checked=true; el.closest('.chk-pill').classList.add('checked'); }
+      });
+    }
+  } else {
+    document.getElementById('entryModalTitle').textContent = 'Add entry';
+    if(preset==='morning'){
+      document.getElementById('f-type').value='Fasting';
+      document.getElementById('acc-vitals').classList.add('open');
+    } else if(preset==='evening'){
+      document.getElementById('f-type').value='Before bed';
+      document.getElementById('acc-exercise').classList.add('open');
+      document.getElementById('acc-symptoms').classList.add('open');
+    }
+  }
+  openModal('entryModalBackdrop');
+}
+
+function saveEntry(ev){
+  ev.preventDefault();
+  const id = document.getElementById('f-id').value || uid();
+  const symptoms = [...document.querySelectorAll('.symp-chk:checked')].map(c=>c.value);
+  const hypoSymptoms = [...document.querySelectorAll('.hypo-chk:checked')].map(c=>c.value);
+  const entry = {
+    id,
+    date: document.getElementById('f-date').value,
+    time: document.getElementById('f-time').value,
+    glucose: document.getElementById('f-glucose').value ? Number(document.getElementById('f-glucose').value) : null,
+    type: document.getElementById('f-type').value,
+    meal: document.getElementById('f-meal').value,
+    carbs: document.getElementById('f-carbs').value ? Number(document.getElementById('f-carbs').value) : null,
+    med: document.getElementById('f-med').value,
+    medDose: document.getElementById('f-meddose').value,
+    medTime: document.getElementById('f-medtime').value,
+    exercise: document.getElementById('f-exercise').value,
+    exerciseDur: document.getElementById('f-exerciseDur').value ? Number(document.getElementById('f-exerciseDur').value) : null,
+    bpSys: document.getElementById('f-bpSys').value ? Number(document.getElementById('f-bpSys').value) : null,
+    bpDia: document.getElementById('f-bpDia').value ? Number(document.getElementById('f-bpDia').value) : null,
+    weight: document.getElementById('f-weight').value ? Number(document.getElementById('f-weight').value) : null,
+    symptoms, symptomOther: document.getElementById('f-symptomOther').value,
+    hypoEvent: document.getElementById('f-hypoEvent').checked,
+    hypoSymptoms, hypoTreatment: document.getElementById('f-hypoTreatment').value,
+    notes: document.getElementById('f-notes').value
+  };
+  const idx = state.entries.findIndex(x=>x.id===id);
+  if(idx>=0) state.entries[idx] = entry; else state.entries.push(entry);
+  saveState();
+  closeModal('entryModalBackdrop');
+  render();
+  return false;
+}
+function deleteCurrentEntry(){
+  const id = document.getElementById('f-id').value;
+  if(!id) return;
+  if(!confirm('Delete this entry?')) return;
+  state.entries = state.entries.filter(x=>x.id!==id);
+  saveState();
+  closeModal('entryModalBackdrop');
+  render();
+}
+
+/* ---------------- MEDICATIONS ---------------- */
+function openMedForm(id){
+  document.getElementById('m-id').value = id||'';
+  if(id){
+    const m = state.medications.find(x=>x.id===id);
+    document.getElementById('m-name').value = m.name||'';
+    document.getElementById('m-dose').value = m.dose||'';
+    document.getElementById('m-freq').value = m.freq||'';
+    document.getElementById('m-start').value = m.start||'';
+    document.getElementById('m-status').value = m.status||'active';
+    document.getElementById('m-changes').value = m.changes||'';
+    document.getElementById('m-notes').value = m.notes||'';
+  } else {
+    ['m-name','m-dose','m-freq','m-start','m-changes','m-notes'].forEach(f=>document.getElementById(f).value='');
+    document.getElementById('m-status').value='active';
+  }
+  openModal('medModalBackdrop');
+}
+function saveMed(ev){
+  ev.preventDefault();
+  const id = document.getElementById('m-id').value || uid();
+  const m = {
+    id, name:document.getElementById('m-name').value, dose:document.getElementById('m-dose').value,
+    freq:document.getElementById('m-freq').value, start:document.getElementById('m-start').value,
+    status:document.getElementById('m-status').value, changes:document.getElementById('m-changes').value,
+    notes:document.getElementById('m-notes').value, updated: todayISO()
+  };
+  const idx = state.medications.findIndex(x=>x.id===id);
+  if(idx>=0) state.medications[idx]=m; else state.medications.push(m);
+  saveState(); closeModal('medModalBackdrop'); render();
+  return false;
+}
+function deleteCurrentMed(){
+  const id = document.getElementById('m-id').value; if(!id) return;
+  if(!confirm('Delete this medication record?')) return;
+  state.medications = state.medications.filter(x=>x.id!==id);
+  saveState(); closeModal('medModalBackdrop'); render();
+}
+
+/* ---------------- LABS ---------------- */
+function openLabForm(id){
+  document.getElementById('l-id').value = id||'';
+  const fields = ['l-date','l-a1c','l-fg','l-ldl','l-hdl','l-trig','l-chol','l-creat','l-egfr','l-other'];
+  if(id){
+    const l = state.labs.find(x=>x.id===id);
+    document.getElementById('l-date').value=l.date||'';
+    document.getElementById('l-a1c').value=l.a1c??'';
+    document.getElementById('l-fg').value=l.fg??'';
+    document.getElementById('l-ldl').value=l.ldl??'';
+    document.getElementById('l-hdl').value=l.hdl??'';
+    document.getElementById('l-trig').value=l.trig??'';
+    document.getElementById('l-chol').value=l.chol??'';
+    document.getElementById('l-creat').value=l.creat??'';
+    document.getElementById('l-egfr').value=l.egfr??'';
+    document.getElementById('l-other').value=l.other||'';
+  } else {
+    fields.forEach(f=>document.getElementById(f).value='');
+    document.getElementById('l-date').value = todayISO();
+  }
+  openModal('labModalBackdrop');
+}
+function saveLab(ev){
+  ev.preventDefault();
+  const id = document.getElementById('l-id').value || uid();
+  const num = v => v===''? null : Number(v);
+  const l = {
+    id, date:document.getElementById('l-date').value,
+    a1c:num(document.getElementById('l-a1c').value), fg:num(document.getElementById('l-fg').value),
+    ldl:num(document.getElementById('l-ldl').value), hdl:num(document.getElementById('l-hdl').value),
+    trig:num(document.getElementById('l-trig').value), chol:num(document.getElementById('l-chol').value),
+    creat:num(document.getElementById('l-creat').value), egfr:num(document.getElementById('l-egfr').value),
+    other:document.getElementById('l-other').value
+  };
+  const idx = state.labs.findIndex(x=>x.id===id);
+  if(idx>=0) state.labs[idx]=l; else state.labs.push(l);
+  saveState(); closeModal('labModalBackdrop'); render();
+  return false;
+}
+function deleteCurrentLab(){
+  const id = document.getElementById('l-id').value; if(!id) return;
+  if(!confirm('Delete this lab result?')) return;
+  state.labs = state.labs.filter(x=>x.id!==id);
+  saveState(); closeModal('labModalBackdrop'); render();
+}
+
+/* ---------------- VISITS ---------------- */
+function openVisitForm(id){
+  document.getElementById('v-id').value = id||'';
+  if(id){
+    const v = state.visits.find(x=>x.id===id);
+    document.getElementById('v-date').value=v.date||'';
+    document.getElementById('v-comments').value=v.comments||'';
+    document.getElementById('v-medchanges').value=v.medchanges||'';
+    document.getElementById('v-tests').value=v.tests||'';
+    document.getElementById('v-followup').value=v.followup||'';
+  } else {
+    ['v-comments','v-medchanges','v-tests','v-followup'].forEach(f=>document.getElementById(f).value='');
+    document.getElementById('v-date').value = todayISO();
+  }
+  openModal('visitModalBackdrop');
+}
+function saveVisit(ev){
+  ev.preventDefault();
+  const id = document.getElementById('v-id').value || uid();
+  const v = {
+    id, date:document.getElementById('v-date').value, comments:document.getElementById('v-comments').value,
+    medchanges:document.getElementById('v-medchanges').value, tests:document.getElementById('v-tests').value,
+    followup:document.getElementById('v-followup').value
+  };
+  const idx = state.visits.findIndex(x=>x.id===id);
+  if(idx>=0) state.visits[idx]=v; else state.visits.push(v);
+  saveState(); closeModal('visitModalBackdrop'); render();
+  return false;
+}
+function deleteCurrentVisit(){
+  const id = document.getElementById('v-id').value; if(!id) return;
+  if(!confirm('Delete this visit record?')) return;
+  state.visits = state.visits.filter(x=>x.id!==id);
+  saveState(); closeModal('visitModalBackdrop'); render();
+}
+
+/* ---------------- RENDER: HOME ---------------- */
+function sortedEntries(){
+  return [...state.entries].sort((a,b)=> (b.date+b.time).localeCompare(a.date+a.time));
+}
+function renderHome(){
+  renderBackupStatus();
+  const list = sortedEntries();
+  const latest = list.find(e=>e.glucose!=null);
+  if(latest){
+    document.getElementById('latestVal').textContent = latest.glucose;
+    document.getElementById('latestMeta').textContent = `${latest.type} · ${fmtDate(latest.date)} ${latest.time}`;
+    const flag = glucoseFlag(latest.glucose);
+    const flagEl = document.getElementById('latestFlag');
+    flagEl.className = 'flag '+flag;
+    flagEl.textContent = flag==='low'?'Below range':flag==='high'?'Above range':flag==='good'?'In range':'—';
+  } else {
+    document.getElementById('latestVal').textContent = '—';
+    document.getElementById('latestMeta').textContent = 'No readings logged yet';
+    document.getElementById('latestFlag').className='flag none';
+    document.getElementById('latestFlag').textContent = 'Tap + to add one';
+  }
+
+  const today = todayISO();
+  const todays = state.entries.filter(e=>e.date===today && e.glucose!=null);
+  const vals = todays.map(e=>e.glucose);
+  const stats = document.getElementById('todayStats');
+  stats.innerHTML = `
+    <div class="stat-box"><div class="n">${vals.length? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length):'—'}</div><div class="l">AVG GLUCOSE</div></div>
+    <div class="stat-box"><div class="n">${vals.length}</div><div class="l">READINGS</div></div>
+    <div class="stat-box"><div class="n">${vals.length? Math.min(...vals):'—'}</div><div class="l">LOWEST</div></div>
+    <div class="stat-box"><div class="n">${vals.length? Math.max(...vals):'—'}</div><div class="l">HIGHEST</div></div>
+  `;
+
+  const recent = document.getElementById('homeRecent');
+  const top5 = list.slice(0,5);
+  if(!top5.length){ recent.innerHTML = '<div class="empty"><div class="ic">📋</div>No entries yet. Use a quick entry above to get started.</div>'; }
+  else {
+    recent.innerHTML = top5.map(e=>entryCardHTML(e)).join('');
+    attachLogItemHandlers();
+  }
+}
+
+/* ---------------- RENDER: LOG ---------------- */
+let logFilter = 'all';
+const LOG_FILTERS = [['all','All'],['7','7 days'],['14','14 days'],['30','30 days']];
+function renderLogFilters(){
+  document.getElementById('logFilters').innerHTML = LOG_FILTERS.map(([k,l])=>
+    `<button class="filter-chip ${logFilter===k?'active':''}" onclick="setLogFilter('${k}')">${l}</button>`).join('');
+}
+function setLogFilter(k){ logFilter=k; renderLogFilters(); renderLog(); }
+function filterByDays(entries, days){
+  if(days==='all') return entries;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-Number(days));
+  return entries.filter(e=> new Date(e.date+'T00:00:00') >= cutoff);
+}
+function entryCardHTML(e){
+  const flag = glucoseFlag(e.glucose);
+  const symp = [...(e.symptoms||[]), e.symptomOther].filter(Boolean).join(', ');
+  const hypoSymp = [...(e.hypoSymptoms||[])].filter(Boolean).join(', ');
+  return `<div class="log-item" data-id="${e.id}">
+    <div class="top">
+      <div>
+        <div class="g ${flag}">${e.glucose ?? '—'}${e.glucose!=null?' <span style=\"font-size:.8rem;font-weight:500;color:var(--ink-soft)\">mg/dL</span>':''}</div>
+        <div class="type-tag">${e.type}</div>
+      </div>
+      <div class="meta" style="text-align:right;">${fmtDate(e.date)}<br>${e.time}</div>
+    </div>
+    <div class="detail">
+      ${e.meal?`<div><b>Meal:</b> ${e.meal}</div>`:''}
+      ${e.carbs!=null?`<div><b>Carbs:</b> ${e.carbs} g</div>`:''}
+      ${e.med?`<div><b>Medication:</b> ${e.med} ${e.medDose||''} ${e.medTime?('at '+e.medTime):''}</div>`:''}
+      ${e.exercise?`<div><b>Exercise:</b> ${e.exercise} ${e.exerciseDur?('· '+e.exerciseDur+' min'):''}</div>`:''}
+      ${(e.bpSys||e.bpDia)?`<div><b>Blood pressure:</b> ${e.bpSys||'?'}/${e.bpDia||'?'}</div>`:''}
+      ${e.weight!=null?`<div><b>Weight:</b> ${e.weight} lb</div>`:''}
+      ${symp?`<div><b>Symptoms:</b> ${symp}</div>`:''}
+      ${e.hypoEvent?`<div><b>Hypo event:</b> ${hypoSymp||'reported'} ${e.hypoTreatment?('· Treated with '+e.hypoTreatment):''}</div>`:''}
+      ${e.notes?`<div><b>Notes:</b> ${e.notes}</div>`:''}
+      <div class="actions">
+        <button class="btn-secondary" onclick="event.stopPropagation();openEntryForm(null,'${e.id}')">Edit</button>
+        <button class="btn-danger" onclick="event.stopPropagation();quickDelete('${e.id}')">Delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+function attachLogItemHandlers(){
+  document.querySelectorAll('.log-item').forEach(item=>{
+    item.onclick = ()=> item.classList.toggle('open');
+  });
+}
+function quickDelete(id){
+  if(!confirm('Delete this entry?')) return;
+  state.entries = state.entries.filter(x=>x.id!==id);
+  saveState(); render();
+}
+function renderLog(){
+  renderLogFilters();
+  const list = filterByDays(sortedEntries(), logFilter);
+  const el = document.getElementById('logList');
+  if(!list.length){ el.innerHTML='<div class="empty"><div class="ic">📋</div>No entries in this period.</div>'; return; }
+  el.innerHTML = list.map(entryCardHTML).join('');
+  attachLogItemHandlers();
+}
+
+/* ---------------- RENDER: TRENDS ---------------- */
+let trendFilter='14';
+const TREND_FILTERS=[['7','7 days'],['14','14 days'],['30','30 days'],['90','90 days'],['all','All time']];
+function renderTrendFilters(){
+  document.getElementById('trendFilters').innerHTML = TREND_FILTERS.map(([k,l])=>
+    `<button class="filter-chip ${trendFilter===k?'active':''}" onclick="setTrendFilter('${k}')">${l}</button>`).join('');
+}
+function setTrendFilter(k){ trendFilter=k; renderTrendFilters(); renderTrends(); }
+
+function computeRangeStats(entries){
+  const withG = entries.filter(e=>e.glucose!=null);
+  const vals = withG.map(e=>e.glucose);
+  const avg = arr => arr.length? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length):null;
+  const fasting = avg(withG.filter(e=>e.type==='Fasting').map(e=>e.glucose));
+  const beforeMeal = avg(withG.filter(e=>e.type.startsWith('Before') && e.type!=='Before bed').map(e=>e.glucose));
+  const afterMeal = avg(withG.filter(e=>e.type.includes('after')).map(e=>e.glucose));
+  const bedtime = avg(withG.filter(e=>e.type==='Before bed').map(e=>e.glucose));
+  return {
+    count: vals.length,
+    avg: avg(vals),
+    min: vals.length?Math.min(...vals):null,
+    max: vals.length?Math.max(...vals):null,
+    fasting, beforeMeal, afterMeal, bedtime,
+    lowCount: vals.filter(v=>v<70).length,
+    highCount: vals.filter(v=>v>180).length
+  };
+}
+function statBox(n,l){ return `<div class="stat-box"><div class="n">${n??'—'}</div><div class="l">${l}</div></div>`; }
+
+function renderTrends(){
+  renderTrendFilters();
+  const entries = filterByDays(state.entries, trendFilter);
+  const s = computeRangeStats(entries);
+  document.getElementById('summaryRangeLabel').textContent = trendFilter==='all'?'All time':`Last ${trendFilter} days`;
+  document.getElementById('rangeStats').innerHTML = [
+    statBox(s.avg,'AVG GLUCOSE'), statBox(s.count,'READINGS'),
+    statBox(s.min,'MINIMUM'), statBox(s.max,'MAXIMUM'),
+    statBox(s.fasting,'FASTING AVG'), statBox(s.beforeMeal,'BEFORE-MEAL AVG'),
+    statBox(s.afterMeal,'AFTER-MEAL AVG'), statBox(s.bedtime,'BEDTIME AVG'),
+    statBox(s.lowCount,'LOW READINGS (<70)'), statBox(s.highCount,'HIGH READINGS (>180)')
+  ].join('');
+
+  renderPeriodTable('weeklyTable', groupByWeek(entries));
+  renderPeriodTable('monthlyTable', groupByMonth(entries));
+  renderCharts(entries);
+}
+function isoWeekKey(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const day = (d.getDay()+6)%7;
+  d.setDate(d.getDate()-day);
+  return d.toISOString().slice(0,10);
+}
+function groupByWeek(entries){
+  const map = {};
+  entries.filter(e=>e.glucose!=null).forEach(e=>{
+    const k = isoWeekKey(e.date);
+    (map[k] = map[k]||[]).push(e.glucose);
+  });
+  return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,8)
+    .map(([k,vals])=>({label:'Week of '+fmtDate(k), avg:Math.round(vals.reduce((a,b)=>a+b,0)/vals.length), min:Math.min(...vals), max:Math.max(...vals), count:vals.length}));
+}
+function groupByMonth(entries){
+  const map = {};
+  entries.filter(e=>e.glucose!=null).forEach(e=>{
+    const k = e.date.slice(0,7);
+    (map[k]=map[k]||[]).push(e.glucose);
+  });
+  return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,6)
+    .map(([k,vals])=>({label:new Date(k+'-01T00:00:00').toLocaleDateString(undefined,{month:'long',year:'numeric'}), avg:Math.round(vals.reduce((a,b)=>a+b,0)/vals.length), min:Math.min(...vals), max:Math.max(...vals), count:vals.length}));
+}
+function renderPeriodTable(id, rows){
+  const el = document.getElementById(id);
+  if(!rows.length){ el.innerHTML = '<tr><td style="padding:8px 0;color:var(--ink-soft);">No data yet</td></tr>'; return; }
+  el.innerHTML = `<tr><th>Period</th><th>Avg</th><th>Range</th><th>#</th></tr>` +
+    rows.map(r=>`<tr><td>${r.label}</td><td>${r.avg}</td><td>${r.min}–${r.max}</td><td>${r.count}</td></tr>`).join('');
+}
+
+function destroyChart(key){ if(charts[key]){ charts[key].destroy(); delete charts[key]; } }
+function baseChartOpts(extra){
+  return Object.assign({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{font:{family:"'IBM Plex Sans'",size:11}}}},
+    scales:{ x:{ticks:{font:{size:10}}}, y:{ticks:{font:{size:10}}} }
+  }, extra||{});
+}
+function renderCharts(entries){
+  const chrono = [...entries].filter(e=>e.glucose!=null).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+
+  destroyChart('glucose');
+  charts.glucose = new Chart(document.getElementById('chartGlucose'), {
+    type:'line',
+    data:{ labels: chrono.map(e=>fmtDate(e.date)+' '+e.time), datasets:[{label:'Glucose (mg/dL)', data:chrono.map(e=>e.glucose), borderColor:'#1F5C57', backgroundColor:'rgba(31,92,87,.12)', tension:.25, pointRadius:2, fill:true}]},
+    options: baseChartOpts()
+  });
+
+  const fasting = chrono.filter(e=>e.type==='Fasting');
+  destroyChart('fasting');
+  charts.fasting = new Chart(document.getElementById('chartFasting'), {
+    type:'line',
+    data:{ labels: fasting.map(e=>fmtDate(e.date)), datasets:[{label:'Fasting glucose', data:fasting.map(e=>e.glucose), borderColor:'#C1622E', backgroundColor:'rgba(193,98,46,.12)', tension:.25, pointRadius:2, fill:true}]},
+    options: baseChartOpts()
+  });
+
+  const byDate = {};
+  chrono.forEach(e=>{
+    byDate[e.date] = byDate[e.date] || {before:[], after:[]};
+    if(e.type.startsWith('Before') && e.type!=='Before bed') byDate[e.date].before.push(e.glucose);
+    if(e.type.includes('after')) byDate[e.date].after.push(e.glucose);
+  });
+  const dates = Object.keys(byDate).sort();
+  destroyChart('beforeAfter');
+  charts.beforeAfter = new Chart(document.getElementById('chartBeforeAfter'), {
+    type:'line',
+    data:{ labels: dates.map(fmtDate), datasets:[
+      {label:'Before meal', data:dates.map(d=>{const a=byDate[d].before;return a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;}), borderColor:'#3C7A5E', tension:.25, pointRadius:2},
+      {label:'After meal', data:dates.map(d=>{const a=byDate[d].after;return a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;}), borderColor:'#C98A2A', tension:.25, pointRadius:2}
+    ]},
+    options: baseChartOpts()
+  });
+
+  const weekRows = groupByWeek(entries).reverse();
+  destroyChart('weekly');
+  charts.weekly = new Chart(document.getElementById('chartWeekly'), {
+    type:'bar',
+    data:{ labels: weekRows.map(r=>r.label.replace('Week of ','')), datasets:[{label:'Weekly avg glucose', data:weekRows.map(r=>r.avg), backgroundColor:'#1F5C57'}]},
+    options: baseChartOpts()
+  });
+
+  const weightEntries = [...entries].filter(e=>e.weight!=null).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  destroyChart('weight');
+  charts.weight = new Chart(document.getElementById('chartWeight'), {
+    type:'line',
+    data:{ labels: weightEntries.map(e=>fmtDate(e.date)), datasets:[{label:'Weight (lb)', data:weightEntries.map(e=>e.weight), borderColor:'#6B9080', backgroundColor:'rgba(107,144,128,.12)', tension:.25, pointRadius:2, fill:true}]},
+    options: baseChartOpts()
+  });
+
+  const bpEntries = [...entries].filter(e=>e.bpSys!=null && e.bpDia!=null).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  destroyChart('bp');
+  charts.bp = new Chart(document.getElementById('chartBP'), {
+    type:'line',
+    data:{ labels: bpEntries.map(e=>fmtDate(e.date)), datasets:[
+      {label:'Systolic', data:bpEntries.map(e=>e.bpSys), borderColor:'#B0433C', tension:.25, pointRadius:2},
+      {label:'Diastolic', data:bpEntries.map(e=>e.bpDia), borderColor:'#3E7F78', tension:.25, pointRadius:2}
+    ]},
+    options: baseChartOpts()
+  });
+}
+
+/* ---------------- RENDER: RECORDS ---------------- */
+function renderRecords(){
+  const medList = document.getElementById('medList');
+  const meds = [...state.medications].sort((a,b)=>(b.start||'').localeCompare(a.start||''));
+  medList.innerHTML = meds.length? meds.map(m=>`
+    <div class="rec-item" onclick="openMedForm('${m.id}')">
+      <div class="head"><span>${m.name}${m.status==='stopped'?' <span style=\"color:var(--ink-soft);font-weight:500;\">(stopped)</span>':''}</span></div>
+      <div>${m.dose||''} ${m.freq? '· '+m.freq:''}</div>
+      ${m.start?`<div style="color:var(--ink-soft);font-size:.78rem;">Started ${fmtDate(m.start)}</div>`:''}
+      ${m.changes?`<div style="margin-top:4px;">${m.changes}</div>`:''}
+    </div>`).join('') : '<div class="empty"><div class="ic">💊</div>No medications recorded yet.</div>';
+
+  const labList = document.getElementById('labList');
+  const labs = [...state.labs].sort((a,b)=>b.date.localeCompare(a.date));
+  labList.innerHTML = labs.length? labs.map(l=>`
+    <div class="rec-item" onclick="openLabForm('${l.id}')">
+      <div class="head">${fmtDate(l.date)}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+        ${l.a1c!=null?`<span>HbA1c: <b>${l.a1c}%</b></span>`:''}
+        ${l.fg!=null?`<span>Fasting: <b>${l.fg}</b></span>`:''}
+        ${l.ldl!=null?`<span>LDL: <b>${l.ldl}</b></span>`:''}
+        ${l.hdl!=null?`<span>HDL: <b>${l.hdl}</b></span>`:''}
+        ${l.trig!=null?`<span>Trig: <b>${l.trig}</b></span>`:''}
+        ${l.chol!=null?`<span>Chol: <b>${l.chol}</b></span>`:''}
+        ${l.creat!=null?`<span>Creat: <b>${l.creat}</b></span>`:''}
+        ${l.egfr!=null?`<span>eGFR: <b>${l.egfr}</b></span>`:''}
+      </div>
+      ${l.other?`<div style="margin-top:4px;">${l.other}</div>`:''}
+    </div>`).join('') : '<div class="empty"><div class="ic">🧪</div>No lab results recorded yet.</div>';
+
+  const visitList = document.getElementById('visitList');
+  const visits = [...state.visits].sort((a,b)=>b.date.localeCompare(a.date));
+  visitList.innerHTML = visits.length? visits.map(v=>`
+    <div class="rec-item" onclick="openVisitForm('${v.id}')">
+      <div class="head">${fmtDate(v.date)}</div>
+      ${v.comments?`<div style="margin-top:4px;"><b>Comments:</b> ${v.comments}</div>`:''}
+      ${v.medchanges?`<div><b>Med changes:</b> ${v.medchanges}</div>`:''}
+      ${v.tests?`<div><b>Tests requested:</b> ${v.tests}</div>`:''}
+      ${v.followup?`<div style="color:var(--ink-soft);font-size:.78rem;margin-top:4px;">Follow-up: ${fmtDate(v.followup)}</div>`:''}
+    </div>`).join('') : '<div class="empty"><div class="ic">🩺</div>No visits recorded yet.</div>';
+}
+
+/* ---------------- RENDER: DOCTOR SUMMARY ---------------- */
+let summaryFilter='28';
+const SUMMARY_FILTERS=[['14','2 weeks'],['28','4 weeks'],['all','All time']];
+function renderSummaryFilters(){
+  document.getElementById('summaryFilters').innerHTML = SUMMARY_FILTERS.map(([k,l])=>
+    `<button class="filter-chip ${summaryFilter===k?'active':''}" onclick="setSummaryFilter('${k}')">${l}</button>`).join('');
+}
+function setSummaryFilter(k){ summaryFilter=k; renderSummaryFilters(); renderDoctorSummary(); }
+
+function renderDoctorSummary(){
+  renderSummaryFilters();
+  const entries = filterByDays(state.entries, summaryFilter);
+  const s = computeRangeStats(entries);
+  const sortedDates = entries.map(e=>e.date).sort();
+  const rangeLabel = sortedDates.length? `${fmtDate(sortedDates[0])} – ${fmtDate(sortedDates[sortedDates.length-1])}` : 'No data in range';
+
+  document.getElementById('ds-range').textContent = rangeLabel;
+  document.getElementById('ds-count').textContent = s.count;
+  document.getElementById('ds-avg').textContent = s.avg!=null? s.avg+' mg/dL':'—';
+  document.getElementById('ds-fasting').textContent = s.fasting!=null? s.fasting+' mg/dL':'—';
+  document.getElementById('ds-aftermeal').textContent = s.afterMeal!=null? s.afterMeal+' mg/dL':'—';
+  document.getElementById('ds-max').textContent = s.max!=null? s.max+' mg/dL':'—';
+  document.getElementById('ds-min').textContent = s.min!=null? s.min+' mg/dL':'—';
+  document.getElementById('ds-hypo').textContent = entries.filter(e=>e.hypoEvent || (e.glucose!=null && e.glucose<70)).length;
+  document.getElementById('ds-hyper').textContent = s.highCount;
+
+  const activeMeds = state.medications.filter(m=>m.status!=='stopped');
+  document.getElementById('ds-meds').innerHTML = activeMeds.length? activeMeds.map(m=>`<div class="summary-line"><span>${m.name}</span><b>${m.dose||''}${m.freq? ' · '+m.freq:''}</b></div>`).join(''): '<p style="color:var(--ink-soft);">No active medications recorded.</p>';
+
+  const changeNotes = [];
+  state.medications.forEach(m=>{ if(m.changes) changeNotes.push(`${m.name}: ${m.changes}`); });
+  state.visits.filter(v=> sortedDates.length? (v.date>=sortedDates[0] && v.date<=sortedDates[sortedDates.length-1]) : true).forEach(v=>{
+    if(v.medchanges) changeNotes.push(`Visit ${fmtDate(v.date)}: ${v.medchanges}`);
+  });
+  document.getElementById('ds-medchanges').innerHTML = changeNotes.length? changeNotes.map(c=>`<p style="margin:4px 0;">${c}</p>`).join(''): '<p style="color:var(--ink-soft);">None recorded in this period.</p>';
+
+  const weightEntries = entries.filter(e=>e.weight!=null).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  if(weightEntries.length>=2){
+    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
+    const diff = (last.weight-first.weight).toFixed(1);
+    document.getElementById('ds-weight').innerHTML = `<div class="summary-line"><span>${fmtDate(first.date)}: ${first.weight} lb → ${fmtDate(last.date)}: ${last.weight} lb</span><b>${diff>0?'+':''}${diff} lb</b></div>`;
+  } else if(weightEntries.length===1){
+    document.getElementById('ds-weight').innerHTML = `<p>${weightEntries[0].weight} lb recorded on ${fmtDate(weightEntries[0].date)}.</p>`;
+  } else {
+    document.getElementById('ds-weight').innerHTML = '<p style="color:var(--ink-soft);">No weight entries in this period.</p>';
+  }
+
+  const bpEntries = entries.filter(e=>e.bpSys!=null && e.bpDia!=null).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  if(bpEntries.length){
+    const avgSys = Math.round(bpEntries.reduce((a,b)=>a+b.bpSys,0)/bpEntries.length);
+    const avgDia = Math.round(bpEntries.reduce((a,b)=>a+b.bpDia,0)/bpEntries.length);
+    document.getElementById('ds-bp').innerHTML = `<div class="summary-line"><span>Average (${bpEntries.length} readings)</span><b>${avgSys}/${avgDia} mmHg</b></div>
+      <div class="summary-line"><span>Most recent</span><b>${bpEntries[bpEntries.length-1].bpSys}/${bpEntries[bpEntries.length-1].bpDia} on ${fmtDate(bpEntries[bpEntries.length-1].date)}</b></div>`;
+  } else {
+    document.getElementById('ds-bp').innerHTML = '<p style="color:var(--ink-soft);">No blood pressure entries in this period.</p>';
+  }
+
+  const relevantLabs = [...state.labs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+  document.getElementById('ds-labs').innerHTML = relevantLabs.length? relevantLabs.map(l=>`
+    <div style="margin-bottom:8px;"><b>${fmtDate(l.date)}:</b> ${[
+      l.a1c!=null?`HbA1c ${l.a1c}%`:null, l.fg!=null?`Fasting glucose ${l.fg}`:null,
+      l.ldl!=null?`LDL ${l.ldl}`:null, l.hdl!=null?`HDL ${l.hdl}`:null,
+      l.trig!=null?`Trig ${l.trig}`:null, l.chol!=null?`Total chol ${l.chol}`:null,
+      l.creat!=null?`Creatinine ${l.creat}`:null, l.egfr!=null?`eGFR ${l.egfr}`:null
+    ].filter(Boolean).join(', ')}</div>`).join('') : '<p style="color:var(--ink-soft);">No lab results recorded yet.</p>';
+
+  const sympSet = new Set();
+  entries.forEach(e=>{ (e.symptoms||[]).forEach(s=>sympSet.add(s)); if(e.symptomOther) sympSet.add(e.symptomOther); if(e.hypoEvent) sympSet.add('Hypoglycemia event'); });
+  document.getElementById('ds-symptoms').innerHTML = sympSet.size? [...sympSet].map(s=>`<span class="type-tag" style="margin:2px 4px 2px 0;">${s}</span>`).join('') : '<p style="color:var(--ink-soft);">No symptoms reported in this period.</p>';
+
+  document.getElementById('ds-questions').value = state.questions || '';
+}
+document.getElementById('ds-questions')?.addEventListener('input', e=>{
+  state.questions = e.target.value; saveState();
+});
+
+/* ---------------- BACKUP / RESTORE ---------------- */
+function exportData(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = todayISO();
+  a.href = url;
+  a.download = `diabetes-log-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  state.lastBackup = new Date().toISOString();
+  saveState();
+  renderBackupStatus();
+  const status = document.getElementById('backupStatus');
+  status.style.color = 'var(--good)';
+  status.textContent = 'Backup downloaded. Transfer this .json file to your other device along with this .html file.';
+}
+function importData(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let incoming;
+    try{ incoming = JSON.parse(reader.result); }
+    catch(e){
+      const status = document.getElementById('backupStatus');
+      status.style.color = 'var(--low)';
+      status.textContent = 'That file could not be read. Make sure you selected a backup .json file.';
+      return;
+    }
+    const hasExisting = state.entries.length || state.medications.length || state.labs.length || state.visits.length;
+    let proceed = true;
+    if(hasExisting){
+      proceed = confirm('This device already has saved records. Replace them with the imported backup? (Choose Cancel to merge new entries into the existing records instead.)');
+    }
+    if(proceed){
+      state = Object.assign({entries:[],medications:[],labs:[],visits:[],questions:""}, incoming);
+    } else {
+      const mergeById = (existing, incoming) => {
+        const map = {}; [...existing, ...(incoming||[])].forEach(x=>{ if(x && x.id) map[x.id]=x; });
+        return Object.values(map);
+      };
+      state.entries = mergeById(state.entries, incoming.entries);
+      state.medications = mergeById(state.medications, incoming.medications);
+      state.labs = mergeById(state.labs, incoming.labs);
+      state.visits = mergeById(state.visits, incoming.visits);
+      state.questions = state.questions || incoming.questions || "";
+    }
+    saveState();
+    render();
+    renderBackupStatus();
+    const status = document.getElementById('backupStatus');
+    status.style.color = 'var(--good)';
+    status.textContent = 'Backup restored successfully.';
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function renderBackupStatus(){
+  const line = document.getElementById('lastBackupLine');
+  const reminder = document.getElementById('backupReminder');
+  if(!line || !reminder) return;
+
+  const hasData = state.entries.length || state.medications.length || state.labs.length || state.visits.length;
+
+  if(!state.lastBackup){
+    line.textContent = 'No backup downloaded yet.';
+    if(hasData){
+      reminder.style.display = 'block';
+      reminder.textContent = "⚠️ You haven't downloaded a backup yet. Your records only exist in this browser — tap \"Download backup\" below to keep a safe copy.";
+    } else {
+      reminder.style.display = 'none';
+    }
+    return;
+  }
+
+  const last = new Date(state.lastBackup);
+  const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+  const when = last.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' at ' + last.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+  line.textContent = `Last backup: ${when}${days>0? ' ('+days+' day'+(days===1?'':'s')+' ago)':' (today)'}`;
+
+  if(days >= 3){
+    reminder.style.display = 'block';
+    reminder.textContent = `⚠️ It's been ${days} days since your last backup. Download a fresh one so your records stay safe if you switch or lose this device.`;
+  } else {
+    reminder.style.display = 'none';
+  }
+}
+
+/* ---------------- master render ---------------- */
+function render(){
+  renderHome();
+  renderLog();
+  renderRecords();
+  if(document.getElementById('panel-trends').classList.contains('active')) renderTrends();
+  if(document.getElementById('panel-summary').classList.contains('active')) renderDoctorSummary();
+}
+
+loadState();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
+  });
+}
+</script>
+</body>
+</html>
